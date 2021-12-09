@@ -1,7 +1,11 @@
 import * as inquirer from "inquirer";
-import chalk from 'chalk';
+import chalk from "chalk";
 import { getAvailableTimeSlotsOnDay, Options } from "./domain/quickTest";
-import { getPersonalInfoOrInquire } from "./domain/personalInfo";
+import { getPersonalInfoOrInquire, PersonalInfo } from "./domain/personalInfo";
+import { bookAppointment } from "./domain/bookAppointment";
+import { continueOrQuit } from "./domain/postBooking";
+import { getSelectedTimeSlots } from "./domain/getTimeSlots";
+import { getAppointmentDate } from "./domain/getDate";
 
 inquirer.registerPrompt("date", require("inquirer-date-prompt"));
 inquirer.registerPrompt(
@@ -9,42 +13,86 @@ inquirer.registerPrompt(
   require("inquirer-autocomplete-prompt")
 );
 
-async function getTimestamp() {
-  const { timestamp } = await inquirer.prompt({
-    // @ts-ignore
-    type: "date",
-    name: "timestamp",
-    message: "When do you want to get a schnelltest?",
-    default: new Date(),
-    transformer: (s) => chalk.bold.green(s),
-    locale: "en-US",
-    format: { weekday: "short", month: "short", hour: undefined, minute: undefined },
-    clearable: true,
-  });
-  return timestamp;
+enum Step {
+  SelectDate,
+  SelectTimeSlot,
+  GetOrFillPersonalInfo,
+  Booking,
+  PostBooking,
 }
 
-function slotToString(slot: Options, index: number): string {
-  return `${index + 1}. (${slot.freeSlots} free) [${slot.calendarName}]:  ${slot.startTime} - ${slot.endTime}`;
-}
-async function getSelectedTimeSlots(timeSlots: Options[]): Promise<{ slot: string, timeSlots: Options[] }> {
-  const { slot } = await inquirer.prompt({
-    // @ts-ignore
-    type: "autocomplete",
-    name: "slot",
-    message: "Select a timeslot below...",
-    source: async (_: any, input: string) => {
-      if (!input) return timeSlots.map(slotToString);
-      return timeSlots
-        .map(slotToString)
-        .filter((timeString) => timeString.includes(input));
-    }
-  });
-  return {slot, timeSlots};
+type AppState = {
+  selectedDate: number | null;
+  selectedSlot: Options | null;
+  availableSlots: Options[];
+  personalInfo: PersonalInfo | null;
 };
 
-getTimestamp()
-  .then(getAvailableTimeSlotsOnDay)
-  .then(getSelectedTimeSlots)
-  .then(getPersonalInfoOrInquire)
-  .then(console.log)
+const DEFAULT_STATE: AppState = {
+  selectedDate: null,
+  selectedSlot: null,
+  availableSlots: [],
+  personalInfo: null,
+};
+
+(async () => {
+  let step: Step = Step.SelectDate;
+  let state: AppState = DEFAULT_STATE;
+
+  while (true) {
+    switch (step) {
+      case Step.SelectDate: {
+        const timestamp = await getAppointmentDate();
+        state.selectedDate = timestamp;
+        step = Step.SelectTimeSlot;
+        break;
+      }
+
+      case Step.SelectTimeSlot: {
+        state.availableSlots = await getAvailableTimeSlotsOnDay(
+          state.selectedDate!
+        );
+        state.selectedSlot = await getSelectedTimeSlots(state.availableSlots);
+        step = Step.GetOrFillPersonalInfo;
+        break;
+      }
+
+      case Step.GetOrFillPersonalInfo: {
+        state.personalInfo = await getPersonalInfoOrInquire();
+        step = Step.Booking;
+        break;
+      }
+
+      case Step.Booking: {
+        if (!state.personalInfo || !state.selectedSlot) {
+          console.log(
+            chalk.bold.red(
+              "Unexpected failure: Missing personal info / selected slot right before booking. Aborting."
+            )
+          );
+          process.exit(1);
+        }
+        await bookAppointment({
+          info: state.personalInfo,
+          slot: state.selectedSlot,
+        });
+
+        step = Step.PostBooking;
+        break;
+      }
+
+      case Step.PostBooking: {
+        const shouldContinue = await continueOrQuit();
+        if (shouldContinue) {
+          step = Step.SelectDate;
+          state = DEFAULT_STATE;
+          break;
+        }
+        console.log(chalk.blue("Exiting..."));
+        process.exit(0);
+      }
+      default:
+        process.exit(0);
+    }
+  }
+})();

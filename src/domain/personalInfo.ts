@@ -1,13 +1,15 @@
 import inquirer from "inquirer";
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 import chalk from "chalk";
 import { format } from "date-fns";
+import { Options } from "./quickTest";
 
-const INFO_PATH = path.join(__dirname + '/info.json');
+const INFO_PATH = path.join(__dirname + "/info.json");
 export type PersonalInfo = {
-  firstName: string,
-  lastName: string,
+  salutation: string;
+  firstName: string;
+  lastName: string;
   birthday: string;
   address: string;
   plz: string;
@@ -15,16 +17,12 @@ export type PersonalInfo = {
   country: string;
   phoneNumber: string;
   email: string;
-}
+};
 export type GetPersonalInfoResultType = {
-  slot: string,
-  info: PersonalInfo,
-}
-export async function getPersonalInfoOrInquire({
-  slot,
-}: {
-  slot: string;
-}): Promise<GetPersonalInfoResultType | null> {
+  slot: Options;
+  info: PersonalInfo;
+};
+export async function getPersonalInfoOrInquire(): Promise<PersonalInfo> {
   if (!fs.existsSync(INFO_PATH)) {
     console.log(
       chalk.green(
@@ -34,6 +32,7 @@ export async function getPersonalInfoOrInquire({
       )
     );
     const {
+      salutation,
       firstName,
       lastName,
       birthday,
@@ -43,6 +42,12 @@ export async function getPersonalInfoOrInquire({
       phoneNumber,
       email,
     } = await inquirer.prompt([
+      {
+        type: "checkbox",
+        name: "salutation",
+        choices: ["Frau", "Herr", "Divers", "Firma"],
+        default: "Herr",
+      },
       {
         type: "input",
         name: "firstName",
@@ -92,6 +97,7 @@ export async function getPersonalInfoOrInquire({
       },
     ]);
     const info = {
+      salutation,
       firstName,
       lastName,
       birthday: format(birthday, "yyyy-MM-dd"),
@@ -103,16 +109,15 @@ export async function getPersonalInfoOrInquire({
       email,
     };
     fs.writeFileSync(INFO_PATH, JSON.stringify(info));
-    return { info, slot };
+    return info;
   }
 
   try {
     const info: PersonalInfo = JSON.parse(
       fs.readFileSync(INFO_PATH).toString()
     );
-    console.log(chalk.green("Using saved personal info for booking:"));
-    console.log(chalk.green(JSON.stringify(info, null, 3)));
-    return { info, slot };
+    console.log(chalk.green("Using saved personal info for booking..."));
+    return info;
   } catch (e) {
     console.log(
       chalk.red(
@@ -121,6 +126,6 @@ export async function getPersonalInfoOrInquire({
         }`
       )
     );
-    return null;
+    process.exit(1);
   }
 }
