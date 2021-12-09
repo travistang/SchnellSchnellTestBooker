@@ -60,14 +60,21 @@ export const bookAppointment = async ({
       headers: {
         // @ts-ignore
         webid: "testnow_schnelltestzentrum",
-        "content-type": "application/json",
+        "content-type": "text/plain",
       },
     });
     console.log(chalk.bold.green("Booking success!"));
   } catch (e) {
     console.log(
-      chalk.red(`Failed to book appointment. Reason: ${(e as Error).message}`)
+      chalk.red(
+        `Failed to book appointment. Reason: ${
+          (e as Error).message
+        }\n Response: \n ${JSON.stringify(
+          (e as { response: any }).response?.data
+        )}`
+      )
     );
+    console.log(chalk.grey(finalPayload));
     process.exit(1);
   }
 };
