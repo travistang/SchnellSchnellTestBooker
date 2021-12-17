@@ -1,11 +1,18 @@
 import * as inquirer from "inquirer";
 import chalk from "chalk";
+import dotenv from 'dotenv';
 import { getAvailableTimeSlotsOnDay, Options } from "./domain/quickTest";
 import { getPersonalInfoOrInquire, PersonalInfo } from "./domain/personalInfo";
-import { bookAppointment } from "./domain/bookAppointment";
+import {
+  bookAppointment,
+  getIdFromBookingResponse,
+} from "./domain/bookAppointment";
 import { continueOrQuit } from "./domain/postBooking";
 import { getSelectedTimeSlots } from "./domain/getTimeSlots";
 import { getAppointmentDate } from "./domain/getDate";
+import { sendBookingIdAsQRCode } from "./domain/telegramBot";
+
+dotenv.config();
 
 inquirer.registerPrompt("date", require("inquirer-date-prompt"));
 inquirer.registerPrompt(
@@ -72,11 +79,17 @@ const DEFAULT_STATE: AppState = {
           );
           process.exit(1);
         }
-        await bookAppointment({
+        const bookingData = await bookAppointment({
           info: state.personalInfo,
           slot: state.selectedSlot,
         });
-
+        const bookingId = await getIdFromBookingResponse(bookingData);
+        console.log(chalk.green("Sending QR Code to you by telegram..."));
+        await sendBookingIdAsQRCode(
+          bookingId,
+          new Date(state.selectedSlot.startTime)
+        );
+        console.log(chalk.green("Sent!"));
         step = Step.PostBooking;
         break;
       }

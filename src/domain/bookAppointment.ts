@@ -1,5 +1,6 @@
 import axios from "axios";
 import chalk from "chalk";
+import { parseString, parseStringPromise } from "xml2js";
 import { PersonalInfo } from "./personalInfo";
 import { Options } from "./quickTest";
 
@@ -56,7 +57,7 @@ export const bookAppointment = async ({
     .replace(escape("{{start}}"), slot.startTime)
     .replace(escape("{{end}}"), slot.endTime);
   try {
-    await axios.post(url, finalPayload, {
+    const response = await axios.post(url, finalPayload, {
       headers: {
         // @ts-ignore
         webid: "testnow_schnelltestzentrum",
@@ -64,6 +65,7 @@ export const bookAppointment = async ({
       },
     });
     console.log(chalk.bold.green("Booking success!"));
+    return response.data;
   } catch (e) {
     console.log(
       chalk.red(
@@ -76,5 +78,16 @@ export const bookAppointment = async ({
     );
     console.log(chalk.grey(finalPayload));
     process.exit(1);
+  }
+};
+
+export const getIdFromBookingResponse = async (response: string) => {
+  try {
+    const result = await parseStringPromise(response);
+    const id = result?.response?.id || null;
+    return Array.isArray(id) ? id[0] : id;
+  } catch {
+    console.log(chalk.red(`Failed to parse data to XML: ${response}`));
+    return null;
   }
 };
